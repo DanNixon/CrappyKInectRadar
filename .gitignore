@@ -1,6 +1,10 @@
 # Temp. files
 *~
 
+# PlatformIO
+.pioenvs
+.piolibdeps
+
 # In source build stuff
 CMakeCache.txt
 CMakeFiles/
