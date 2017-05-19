@@ -27,12 +27,8 @@
 #include <cmath>
 #include <iostream>
 #include <mutex>
-#include <stdio.h>
-#include <string.h>
 #include <thread>
 #include <vector>
-
-#include <pthread.h>
 
 #include "libfreenect.hpp"
 
@@ -51,11 +47,11 @@ class MyFreenectDevice : public Freenect::FreenectDevice
 public:
   MyFreenectDevice(freenect_context *_ctx, int _index)
       : Freenect::FreenectDevice(_ctx, _index)
-      , m_buffer_depth(freenect_find_video_mode(FREENECT_RESOLUTION_MEDIUM, FREENECT_VIDEO_RGB).bytes)
-      , m_buffer_video(freenect_find_video_mode(FREENECT_RESOLUTION_MEDIUM, FREENECT_VIDEO_RGB).bytes)
+      , m_depthBuffer(freenect_find_video_mode(FREENECT_RESOLUTION_MEDIUM, FREENECT_VIDEO_RGB).bytes)
+      , m_videoBuffer(freenect_find_video_mode(FREENECT_RESOLUTION_MEDIUM, FREENECT_VIDEO_RGB).bytes)
       , m_gamma(2048)
-      , m_new_rgb_frame(false)
-      , m_new_depth_frame(false)
+      , m_newDepthFrame(false)
+      , m_newVideoFrame(false)
   {
     for (unsigned int i = 0; i < 2048; i++)
     {
@@ -67,15 +63,15 @@ public:
 
   void VideoCallback(void *_rgb, uint32_t timestamp)
   {
-    std::lock_guard<std::mutex> lock(m_rgb_mutex);
+    std::lock_guard<std::mutex> lock(m_videoMutex);
     uint8_t *rgb = static_cast<uint8_t *>(_rgb);
-    std::copy(rgb, rgb + getVideoBufferSize(), m_buffer_video.begin());
-    m_new_rgb_frame = true;
+    std::copy(rgb, rgb + getVideoBufferSize(), m_videoBuffer.begin());
+    m_newVideoFrame = true;
   };
 
   void DepthCallback(void *_depth, uint32_t timestamp)
   {
-    std::lock_guard<std::mutex> lock(m_depth_mutex);
+    std::lock_guard<std::mutex> lock(m_depthMutex);
     uint16_t *depth = static_cast<uint16_t *>(_depth);
     for (unsigned int i = 0; i < 640 * 480; i++)
     {
@@ -84,73 +80,73 @@ public:
       switch (pval >> 8)
       {
       case 0:
-        m_buffer_depth[3 * i + 0] = 255;
-        m_buffer_depth[3 * i + 1] = 255 - lb;
-        m_buffer_depth[3 * i + 2] = 255 - lb;
+        m_depthBuffer[3 * i + 0] = 255;
+        m_depthBuffer[3 * i + 1] = 255 - lb;
+        m_depthBuffer[3 * i + 2] = 255 - lb;
         break;
       case 1:
-        m_buffer_depth[3 * i + 0] = 255;
-        m_buffer_depth[3 * i + 1] = lb;
-        m_buffer_depth[3 * i + 2] = 0;
+        m_depthBuffer[3 * i + 0] = 255;
+        m_depthBuffer[3 * i + 1] = lb;
+        m_depthBuffer[3 * i + 2] = 0;
         break;
       case 2:
-        m_buffer_depth[3 * i + 0] = 255 - lb;
-        m_buffer_depth[3 * i + 1] = 255;
-        m_buffer_depth[3 * i + 2] = 0;
+        m_depthBuffer[3 * i + 0] = 255 - lb;
+        m_depthBuffer[3 * i + 1] = 255;
+        m_depthBuffer[3 * i + 2] = 0;
         break;
       case 3:
-        m_buffer_depth[3 * i + 0] = 0;
-        m_buffer_depth[3 * i + 1] = 255;
-        m_buffer_depth[3 * i + 2] = lb;
+        m_depthBuffer[3 * i + 0] = 0;
+        m_depthBuffer[3 * i + 1] = 255;
+        m_depthBuffer[3 * i + 2] = lb;
         break;
       case 4:
-        m_buffer_depth[3 * i + 0] = 0;
-        m_buffer_depth[3 * i + 1] = 255 - lb;
-        m_buffer_depth[3 * i + 2] = 255;
+        m_depthBuffer[3 * i + 0] = 0;
+        m_depthBuffer[3 * i + 1] = 255 - lb;
+        m_depthBuffer[3 * i + 2] = 255;
         break;
       case 5:
-        m_buffer_depth[3 * i + 0] = 0;
-        m_buffer_depth[3 * i + 1] = 0;
-        m_buffer_depth[3 * i + 2] = 255 - lb;
+        m_depthBuffer[3 * i + 0] = 0;
+        m_depthBuffer[3 * i + 1] = 0;
+        m_depthBuffer[3 * i + 2] = 255 - lb;
         break;
       default:
-        m_buffer_depth[3 * i + 0] = 0;
-        m_buffer_depth[3 * i + 1] = 0;
-        m_buffer_depth[3 * i + 2] = 0;
+        m_depthBuffer[3 * i + 0] = 0;
+        m_depthBuffer[3 * i + 1] = 0;
+        m_depthBuffer[3 * i + 2] = 0;
         break;
       }
     }
-    m_new_depth_frame = true;
+    m_newDepthFrame = true;
   }
 
   bool getRGB(std::vector<uint8_t> &buffer)
   {
-    std::lock_guard<std::mutex> lock(m_rgb_mutex);
-    if (!m_new_rgb_frame)
+    std::lock_guard<std::mutex> lock(m_videoMutex);
+    if (!m_newVideoFrame)
       return false;
-    buffer.swap(m_buffer_video);
-    m_new_rgb_frame = false;
+    buffer.swap(m_videoBuffer);
+    m_newVideoFrame = false;
     return true;
   }
 
   bool getDepth(std::vector<uint8_t> &buffer)
   {
-    std::lock_guard<std::mutex> lock(m_depth_mutex);
-    if (!m_new_depth_frame)
+    std::lock_guard<std::mutex> lock(m_depthMutex);
+    if (!m_newDepthFrame)
       return false;
-    buffer.swap(m_buffer_depth);
-    m_new_depth_frame = false;
+    buffer.swap(m_depthBuffer);
+    m_newDepthFrame = false;
     return true;
   }
 
 private:
-  std::vector<uint8_t> m_buffer_depth;
-  std::vector<uint8_t> m_buffer_video;
+  std::vector<uint8_t> m_depthBuffer;
+  std::vector<uint8_t> m_videoBuffer;
   std::vector<uint16_t> m_gamma;
-  std::mutex m_rgb_mutex;
-  std::mutex m_depth_mutex;
-  bool m_new_rgb_frame;
-  bool m_new_depth_frame;
+  std::mutex m_depthMutex;
+  std::mutex m_videoMutex;
+  bool m_newDepthFrame;
+  bool m_newVideoFrame;
 };
 
 enum Mode
@@ -169,11 +165,9 @@ MyFreenectDevice *device;
 
 GLuint imageTexture;
 
-float tilt_angle = 0;
+float titleAngle = 0;
 
-int window(0);
-int g_argc;
-char **g_argv;
+int window = 0;
 
 template <typename T> void clamp(T &v, T lo, T hi)
 {
@@ -193,7 +187,7 @@ void setDeviceFormatForMode(Mode m)
   }
 }
 
-void DrawGLScene()
+void drawScene()
 {
   static std::vector<uint8_t> buff(640 * 480 * 4);
 
@@ -276,16 +270,16 @@ void keyPressed(unsigned char key, int x, int y)
 
   case 'W':
   case 'w':
-    tilt_angle += 1.0f;
-    clamp(tilt_angle, -30.0f, 30.0f);
-    device->setTiltDegrees(tilt_angle);
+    titleAngle += 1.0f;
+    clamp(titleAngle, -30.0f, 30.0f);
+    device->setTiltDegrees(titleAngle);
     break;
 
   case 'S':
   case 's':
-    tilt_angle -= 1.0f;
-    clamp(tilt_angle, -30.0f, 30.0f);
-    device->setTiltDegrees(tilt_angle);
+    titleAngle -= 1.0f;
+    clamp(titleAngle, -30.0f, 30.0f);
+    device->setTiltDegrees(titleAngle);
     break;
 
   case 'M':
@@ -340,28 +334,6 @@ void initGL(int width, int height)
   rezizeWindow(width, height);
 }
 
-void *glThread(void *arg)
-{
-  glutInit(&g_argc, g_argv);
-
-  glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
-  glutInitWindowSize(640, 480);
-  glutInitWindowPosition(0, 0);
-
-  window = glutCreateWindow("LibFreenect");
-
-  glutDisplayFunc(&DrawGLScene);
-  glutIdleFunc(&DrawGLScene);
-  glutReshapeFunc(&rezizeWindow);
-  glutKeyboardFunc(&keyPressed);
-
-  initGL(640, 480);
-
-  glutMainLoop();
-
-  return NULL;
-}
-
 int main(int argc, char **argv)
 {
   device = &freenect.createDevice<MyFreenectDevice>(0);
@@ -369,7 +341,23 @@ int main(int argc, char **argv)
   device->startDepth();
 
   printInfo();
-  glThread(NULL);
+
+  glutInit(&argc, argv);
+
+  glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
+  glutInitWindowSize(640, 480);
+  glutInitWindowPosition(0, 0);
+
+  window = glutCreateWindow("Crappy Kinect Radar");
+
+  glutDisplayFunc(&drawScene);
+  glutIdleFunc(&drawScene);
+  glutReshapeFunc(&rezizeWindow);
+  glutKeyboardFunc(&keyPressed);
+
+  initGL(640, 480);
+
+  glutMainLoop();
 
   device->stopVideo();
   device->stopDepth();
