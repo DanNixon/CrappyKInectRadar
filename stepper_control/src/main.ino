@@ -7,8 +7,12 @@
 
 AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
 
+bool moveDone = true;
+
 void setup()
 {
+  Serial.begin(9600);
+
   pinMode(MS_PIN, OUTPUT);
   digitalWrite(MS_PIN, HIGH);
 
@@ -19,14 +23,24 @@ void setup()
   stepper.setAcceleration(1000.0f);
 
   stepper.enableOutputs();
-  stepper.moveTo(1250);
+
+  Serial.println("RDY");
 }
 
 void loop()
 {
-  // If at the end of travel go to the other end
-  if (stepper.distanceToGo() == 0)
-    stepper.moveTo(-stepper.currentPosition());
+  if (Serial.available() > 2)
+  {
+    int delta = Serial.parseInt();
+    stepper.move(delta);
+    moveDone = false;
+  }
+
+  if (!moveDone && !stepper.isRunning())
+  {
+    Serial.println("MD");
+    moveDone = true;
+  }
 
   stepper.run();
 }
