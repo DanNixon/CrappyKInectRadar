@@ -184,6 +184,8 @@ void setDeviceFormatForMode(Mode m)
   case MODE_IR:
     device->setVideoFormat(FREENECT_VIDEO_IR_8BIT);
     break;
+  default:
+    break;
   }
 }
 
@@ -202,6 +204,8 @@ void drawScene()
   case MODE_IR:
     device->getRGB(buff);
     break;
+  default:
+    return;
   }
 
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -234,7 +238,7 @@ void printInfo()
 {
   std::cout << "Available Controls\n";
   std::cout << "==================\n";
-  std::cout << "Tilt/Pitch   :   W/S\n";
+  std::cout << "Tilt/Pitch   :   W / S\n";
   std::cout << "Set LED mode :   0 - 5\n";
   std::cout << "Toggle mode  :   M\n";
   std::cout << "Quit         :   Q or Esc\n";
@@ -356,6 +360,11 @@ int main(int argc, char **argv)
   glutKeyboardFunc(&keyPressed);
 
   initGL(640, 480);
+
+  /* Set defaults */
+  mode = MODE_RGB;
+  setDeviceFormatForMode(mode);
+  device->setTiltDegrees(titleAngle);
 
   glutMainLoop();
 
