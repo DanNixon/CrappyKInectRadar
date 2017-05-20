@@ -208,6 +208,8 @@ enum Mode
 
 Mode mode;
 
+int g_width;
+int g_height;
 int window = 0;
 GLuint imageTexture;
 Freenect::Freenect freenect;
@@ -271,11 +273,11 @@ void drawScene()
   glTexCoord2f(0, 0);
   glVertex3f(0, 0, 0);
   glTexCoord2f(1, 0);
-  glVertex3f(640, 0, 0);
+  glVertex3f(g_width, 0, 0);
   glTexCoord2f(1, 1);
-  glVertex3f(640, 480, 0);
+  glVertex3f(g_width, g_height, 0);
   glTexCoord2f(0, 1);
-  glVertex3f(0, 480, 0);
+  glVertex3f(0, g_height, 0);
   glEnd();
 
   glutSwapBuffers();
@@ -402,9 +404,11 @@ int main(int argc, char **argv)
 {
   po::options_description desc("Allowed options");
   // clang-format off
-  desc.add_options()("help", "produce help message")(
-      "port", po::value<std::string>(), "serial port for stepper driver")("baud", po::value<int>()->default_value(9600),
-                                                                          "baud rate for stepper driver");
+  desc.add_options()("help", "produce help message")
+    ("width", po::value<int>()->default_value(640), "display width")
+    ("height", po::value<int>()->default_value(480), "display height")
+    ("port", po::value<std::string>(), "serial port for stepper driver")
+    ("baud", po::value<int>()->default_value(9600), "baud rate for stepper driver");
   // clang-format on
 
   po::variables_map vm;
@@ -415,6 +419,9 @@ int main(int argc, char **argv)
     std::cout << desc << "\n";
     return 0;
   }
+
+  g_width = vm["width"].as<int>();
+  g_height = vm["height"].as<int>();
 
   device = &freenect.createDevice<MyFreenectDevice>(0);
   device->startVideo();
@@ -428,7 +435,7 @@ int main(int argc, char **argv)
   glutInit(&argc, argv);
 
   glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
-  glutInitWindowSize(640, 480);
+  glutInitWindowSize(g_width, g_height);
   glutInitWindowPosition(0, 0);
 
   window = glutCreateWindow("Crappy Kinect Radar");
@@ -438,7 +445,7 @@ int main(int argc, char **argv)
   glutReshapeFunc(&rezizeWindow);
   glutKeyboardFunc(&keyPressed);
 
-  initGL(640, 480);
+  initGL(g_width, g_height);
 
   /* Set defaults */
   mode = MODE_RGB;
