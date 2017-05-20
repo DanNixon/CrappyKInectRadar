@@ -49,45 +49,44 @@ namespace po = boost::program_options;
 class StepperController
 {
 public:
-  enum SweepState
-  {
-    SWEEP_OFF,
-    SWEEP_THERE,
-    SWEEP_BACK
-  };
-
-public:
   StepperController(serial::Serial &port)
       : m_port(port)
-      , m_sweepWidth(500)
       , m_inMotion(false)
   {
     if (!port.isOpen())
       throw std::runtime_error("Serial port is not open");
+
+    m_thread = std::thread(&StepperController::workerThreadFunc, this);
   }
 
   void move(int dist)
   {
     std::string message = std::to_string(dist) + "\n";
     m_port.write(message);
+    m_inMotion = true;
   }
 
-  void startAsyncSweep()
+  bool isInMotion() const
   {
-    m_sweepState = SWEEP_THERE;
+    return m_inMotion;
   }
 
 private:
   void workerThreadFunc()
   {
-    /* TODO */
+    while (1)
+    {
+      std::string line;
+      m_port.readline(line);
+      if (line.find("MD") != std::string::npos)
+        m_inMotion = false;
+    }
   }
 
 private:
   serial::Serial &m_port;
-  int m_sweepWidth;
   bool m_inMotion;
-  SweepState m_sweepState;
+  std::thread m_thread;
 };
 
 class MyFreenectDevice : public Freenect::FreenectDevice
@@ -217,6 +216,8 @@ MyFreenectDevice *device;
 float titleAngle = 0;
 
 StepperController *stepper;
+bool sweep = false;
+std::thread sweepThread;
 
 template <typename T> void clamp(T &v, T lo, T hi)
 {
@@ -289,6 +290,7 @@ void printInfo()
   std::cout << "==================\n";
   std::cout << "Tilt/Pitch   :   W / S\n";
   std::cout << "Rotate/Yaw   :   A / D\n";
+  std::cout << "Sweep        :   Z\n";
   std::cout << "Set LED mode :   0 - 5\n";
   std::cout << "Toggle mode  :   M\n";
   std::cout << "Quit         :   Q or Esc\n";
@@ -326,12 +328,19 @@ void keyPressed(unsigned char key, int x, int y)
   case 'a':
     if (stepper)
       stepper->move(-50);
+    sweep = false;
     break;
 
   case 'D':
   case 'd':
     if (stepper)
       stepper->move(50);
+    sweep = false;
+    break;
+
+  case 'Z':
+  case 'z':
+    sweep = true;
     break;
 
   case 'W':
@@ -400,6 +409,25 @@ void initGL(int width, int height)
   rezizeWindow(width, height);
 }
 
+void sweepThreadFunc()
+{
+  int lastSweepAmount = 1000;
+
+  while (true)
+  {
+    if (sweep)
+    {
+      if (!stepper->isInMotion())
+      {
+        lastSweepAmount *= -1;
+        stepper->move(lastSweepAmount);
+      }
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+}
+
 int main(int argc, char **argv)
 {
   po::options_description desc("Allowed options");
@@ -431,6 +459,7 @@ int main(int argc, char **argv)
 
   serial::Serial port(vm["port"].as<std::string>(), vm["baud"].as<int>());
   stepper = new StepperController(port);
+  sweepThread = std::thread(sweepThreadFunc);
 
   glutInit(&argc, argv);
 
