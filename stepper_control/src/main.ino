@@ -22,8 +22,6 @@ void setup()
   stepper.setMaxSpeed(500.0f);
   stepper.setAcceleration(1000.0f);
 
-  stepper.enableOutputs();
-
   Serial.println("RDY");
 }
 
@@ -32,12 +30,14 @@ void loop()
   if (Serial.available() > 2)
   {
     int delta = Serial.parseInt();
+    stepper.enableOutputs();
     stepper.move(delta);
     moveDone = false;
   }
 
   if (!moveDone && !stepper.isRunning())
   {
+    stepper.disableOutputs();
     Serial.println("MD");
     moveDone = true;
   }
