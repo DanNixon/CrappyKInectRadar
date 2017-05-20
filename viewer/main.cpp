@@ -30,6 +30,7 @@
 #include <thread>
 #include <vector>
 
+#include <boost/program_options.hpp>
 #include <libfreenect.hpp>
 #include <serial/serial.h>
 
@@ -42,6 +43,8 @@
 #include <GL/glu.h>
 #include <GL/glut.h>
 #endif
+
+namespace po = boost::program_options;
 
 class StepperController
 {
@@ -397,13 +400,29 @@ void initGL(int width, int height)
 
 int main(int argc, char **argv)
 {
+  po::options_description desc("Allowed options");
+  // clang-format off
+  desc.add_options()("help", "produce help message")(
+      "port", po::value<std::string>(), "serial port for stepper driver")("baud", po::value<int>()->default_value(9600),
+                                                                          "baud rate for stepper driver");
+  // clang-format on
+
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+
+  if (vm.count("help"))
+  {
+    std::cout << desc << "\n";
+    return 0;
+  }
+
   device = &freenect.createDevice<MyFreenectDevice>(0);
   device->startVideo();
   device->startDepth();
 
   printInfo();
 
-  serial::Serial port("/dev/ttyACM0", 9600);
+  serial::Serial port(vm["port"].as<std::string>(), vm["baud"].as<int>());
   stepper = new StepperController(port);
 
   glutInit(&argc, argv);
