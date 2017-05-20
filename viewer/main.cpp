@@ -30,7 +30,8 @@
 #include <thread>
 #include <vector>
 
-#include "libfreenect.hpp"
+#include <libfreenect.hpp>
+#include <serial/serial.h>
 
 #if defined(__APPLE__)
 #include <GLUT/glut.h>
@@ -41,6 +42,50 @@
 #include <GL/glu.h>
 #include <GL/glut.h>
 #endif
+
+class StepperController
+{
+public:
+  enum SweepState
+  {
+    SWEEP_OFF,
+    SWEEP_THERE,
+    SWEEP_BACK
+  };
+
+public:
+  StepperController(serial::Serial &port)
+      : m_port(port)
+      , m_sweepWidth(500)
+      , m_inMotion(false)
+  {
+    if (!port.isOpen())
+      throw std::runtime_error("Serial port is not open");
+  }
+
+  void move(int dist)
+  {
+    std::string message = std::to_string(dist) + "\n";
+    m_port.write(message);
+  }
+
+  void startAsyncSweep()
+  {
+    m_sweepState = SWEEP_THERE;
+  }
+
+private:
+  void workerThreadFunc()
+  {
+    /* TODO */
+  }
+
+private:
+  serial::Serial &m_port;
+  int m_sweepWidth;
+  bool m_inMotion;
+  SweepState m_sweepState;
+};
 
 class MyFreenectDevice : public Freenect::FreenectDevice
 {
@@ -160,14 +205,13 @@ enum Mode
 
 Mode mode;
 
+int window = 0;
+GLuint imageTexture;
 Freenect::Freenect freenect;
 MyFreenectDevice *device;
-
-GLuint imageTexture;
-
 float titleAngle = 0;
 
-int window = 0;
+StepperController *stepper;
 
 template <typename T> void clamp(T &v, T lo, T hi)
 {
@@ -239,6 +283,7 @@ void printInfo()
   std::cout << "Available Controls\n";
   std::cout << "==================\n";
   std::cout << "Tilt/Pitch   :   W / S\n";
+  std::cout << "Rotate/Yaw   :   A / D\n";
   std::cout << "Set LED mode :   0 - 5\n";
   std::cout << "Toggle mode  :   M\n";
   std::cout << "Quit         :   Q or Esc\n";
@@ -270,6 +315,18 @@ void keyPressed(unsigned char key, int x, int y)
 
   case '0':
     device->setLed(LED_OFF);
+    break;
+
+  case 'A':
+  case 'a':
+    if (stepper)
+      stepper->move(-50);
+    break;
+
+  case 'D':
+  case 'd':
+    if (stepper)
+      stepper->move(50);
     break;
 
   case 'W':
@@ -345,6 +402,9 @@ int main(int argc, char **argv)
   device->startDepth();
 
   printInfo();
+
+  serial::Serial port("/dev/ttyACM0", 9600);
+  stepper = new StepperController(port);
 
   glutInit(&argc, argv);
 
